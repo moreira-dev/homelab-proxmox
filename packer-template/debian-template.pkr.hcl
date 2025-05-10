@@ -27,6 +27,8 @@ variable "proxmox_tls_insecure" {
 
 variable "ssh_authorized_keys" {
   type = list(string)
+  description = "A list of public SSH keys to embed in the cloud.cfg for the default user during image creation."
+  default = []
 }
 
 variable "http_interface" {

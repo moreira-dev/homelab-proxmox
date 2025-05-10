@@ -102,10 +102,7 @@ system_info:
      groups: [adm, audio, cdrom, dialout, dip, floppy, netdev, plugdev, sudo, video]
      sudo: ["ALL=(ALL) NOPASSWD:ALL"]
      shell: /bin/bash
-     ssh_authorized_keys:
-     %{ for key in ssh_authorized_keys ~}
-       - ${key}
-     %{ endfor ~}
+     ssh_authorized_keys: ${jsonencode(ssh_authorized_keys)}
    paths:
       cloud_dir: /var/lib/cloud/
       templates_dir: /etc/cloud/templates/
