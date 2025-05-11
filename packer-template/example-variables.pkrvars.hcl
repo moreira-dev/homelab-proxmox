@@ -4,6 +4,7 @@ proxmox_api_user     = "root@pam"
 proxmox_api_password = "my secret password"
 http_interface       = "Ethernet"
 
+template_name        = "debian-template-packer"
 iso_url              = "https://debian.mirror.digitalpacific.com.au/debian-cd/12.10.0/amd64/iso-cd/debian-12.10.0-amd64-netinst.iso"
 checksum_url         = "https://debian.mirror.digitalpacific.com.au/debian-cd/12.10.0/amd64/iso-cd/SHA512SUMS"
 
