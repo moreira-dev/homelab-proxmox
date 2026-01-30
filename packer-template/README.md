@@ -1,64 +1,85 @@
-# Packer Template for Proxmox Debian VM
+# Packer Template
 
-This folder contains the configuration files and scripts to create a standardized Debian 12 (Bookworm) VM template for Proxmox Virtual Environment (PVE) using HashiCorp Packer and Cloud-Init.
+> **Getting Started?** See the [main README](../README.md) for quick start instructions.
 
-## Setup
+This directory contains the Packer configuration for building a Debian 12 VM template on Proxmox.
 
-1. **Create Variables File:**
-    * Copy the example variables file:
-        ```bash
-        cp example-variables.pkrvars.hcl variables.auto.pkrvars.hcl
-        ```
-    * **Edit `variables.auto.pkrvars.hcl`** and fill in your specific details.
+## Files
 
-2. **Review Configuration:**
-    * Examine `debian-template.pkr.hcl` if you want to change VM resources (cores, memory, disk size), network bridge (`vmbr0`), storage pools (`local-lvm`), etc.
-    * Review `config/preseed.cfg` if you need to customize the Debian installation (e.g., default packages, partitioning, timezone).
-    * Review `config/cloud.cfg.tpl` if you want to change default cloud-init behavior.
+| File | Purpose |
+|------|---------|
+| `debian-template.pkr.hcl` | Main Packer configuration (VM specs, provisioners, output template) |
+| `config/preseed.cfg` | Debian installer automation (packages, partitioning, locale, users) |
+| `config/cloud.cfg.tpl` | Cloud-init configuration embedded in the template |
+| `example-variables.pkrvars.hcl` | Example variables file (copy to `variables.auto.pkrvars.hcl`) |
 
-## Building the Template
+## All Variables
 
-1. **Initialize Packer:**
-    * Download the required Packer plugin for Proxmox. Run this in the same directory as `debian-template.pkr.hcl`:
-        ```bash
-        packer init .
-        ```
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `proxmox_host` | Proxmox API URL (e.g., `https://192.168.1.100:8006`) | Yes |
+| `proxmox_node` | Proxmox node name | Yes |
+| `proxmox_api_user` | API user in format `user@realm!token-name` | Yes |
+| `proxmox_api_token_secret` | API token secret (use `PKR_VAR_` env var) | Yes |
+| `http_interface` | Network interface for Packer's HTTP server | Yes |
+| `ssh_public_key` | SSH public key to embed in the template | Yes |
+| `iso_url` | Debian netinstall ISO URL | No (has default) |
+| `iso_checksum_url` | ISO checksum URL | No (has default) |
 
-2. **Run the Build:**
-    * Start the template creation process:
-        ```bash
-        packer build .
-        ```
-    * Packer will automatically use the variables defined in `variables.auto.pkrvars.hcl`.
+## Customizing the Debian Installation
 
-3. **Monitor the Build:**
-    * The build process can take 5-10 minutes depending on your internet speed, host hardware, and mirror speed.
-    * You can watch the progress in the Packer output console.
-    * You can also monitor the temporary VM being created and provisioned via the Proxmox web UI (look for a VM named after the ISO file).
+Edit `config/preseed.cfg` to change:
+
+- **Packages**: Modify `pkgsel/include` to add/remove packages installed during setup
+- **Partitioning**: Adjust LVM configuration in the partitioning section
+- **Locale/Timezone**: Change `d-i debian-installer/locale` and `d-i time/zone`
+- **Root password**: Change `d-i passwd/root-password` (this is reset by cloud-init on deployment)
+
+## Customizing Cloud-Init Defaults
+
+Edit `config/cloud.cfg.tpl` to change:
+
+- **Default user**: Modify the `users` block (default: `debian` with sudo)
+- **SSH settings**: Adjust `disable_root`, `ssh_pwauth`, etc.
+- **Modules**: Enable/disable cloud-init modules in the `cloud_init_modules` lists
 
 ## Troubleshooting
 
-* **Enable Debug Logs:** For detailed logs, run Packer with the `PACKER_LOG` environment variable:
-    ```bash
-    PACKER_LOG=1 packer build .
-    ```
-* **VM Cannot Reach Packer HTTP Server:**
-    * **Symptoms:** Build stalls during preseed phase; `wget` test from VM console (Alt+F2) to `http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg` fails/times out.
-    * **Causes:** Firewall on the machine running Packer (e.g., Windows Firewall) might be blocking incoming connections from the VM's IP; network routing issue between VM network (`vmbr0`) and Packer host network.
-    * **Fixes:** Adjust host firewall rules; ensure the `http_interface` variable in the `variables.auto.pkrvars.hcl` file is using your internet interface.
-* **APIPA Address (`169.254.x.x`):**
-    * **Symptoms:** Packer logs show `{{ .HTTPIP }}` resolving to `169.254.x.x`.
-    * **Cause:** Packer is binding its HTTP server to a network interface on the host machine that failed to get an IP via DHCP.
-    * **Fix:** Ensure the `http_interface` variable in the `variables.auto.pkrvars.hcl` file is using your internet interface.
-* **Preseed Stalls:**
-    * **Symptoms:** Installation shows progress then hangs on a blue screen.
-    * **Causes:** Issue in `preseed.cfg` (e.g., network config, package install failure, mirror unreachable, missing directive).
-    * **Fixes:** Use Proxmox console, switch to virtual consoles (`Alt+F4` for logs, `Alt+F2` for shell). Check logs for errors. Test network connectivity (`ping`, `nslookup`, `wget`) from the shell. Review and simplify `preseed.cfg`. Check Debian mirror status.
-* **SSH Connection Fails:**
-    * **Symptoms:** Packer reports connection timed out or authentication failed after the OS install finishes.
-    * **Causes:** SSH server not installed/running; user specified in `ssh_username` not created or password incorrect; firewall blocking SSH port; QEMU Guest Agent issues delaying IP reporting.
-    * **Fixes:** Ensure `ssh-server` is in `pkgsel/include` in `preseed.cfg`; verify user/password setup in preseed matches Packer communicator settings; check VM firewall; ensure guest agent is installed.
-* **Proxmox API Errors:**
-    * **Symptoms:** Errors mentioning authentication, permissions, or object not found.
-    * **Causes:** Incorrect API user/token/node; insufficient permissions for the API token.
-    * **Fixes:** Verify credentials in `variables.auto.pkrvars.hcl`; ensure the token has necessary privileges in Proxmox Datacenter -> Permissions -> API Tokens.
+### Build stalls during preseed (VM can't fetch preseed.cfg)
+
+**Symptoms**: Installation hangs; testing `wget http://<packer-ip>:<port>/preseed.cfg` from VM console (Alt+F2) fails.
+
+**Causes & Fixes**:
+1. **Firewall blocking**: Your machine's firewall is blocking incoming connections from the VM. Add a rule to allow traffic from your VM network.
+2. **Wrong interface**: `http_interface` is set to the wrong network interface. Run `ip addr` (Linux/macOS) or `ipconfig` (Windows) to find the correct one.
+
+### Packer HTTP IP shows `169.254.x.x`
+
+Packer is binding to an interface without a valid IP address. This happens when `http_interface` points to a disconnected or misconfigured adapter. Set it to your primary network interface.
+
+### Preseed stalls on blue screen
+
+**Diagnosis**: Use Proxmox console, press Alt+F4 for installer logs, Alt+F2 for a shell.
+
+**Common causes**:
+- Debian mirror unreachable (test with `ping deb.debian.org` from shell)
+- Syntax error in preseed.cfg
+- Package in `pkgsel/include` doesn't exist
+
+### SSH connection timeout after install completes
+
+1. Verify `ssh-server` is in `pkgsel/include` in preseed.cfg
+2. Check that `ssh_username` and `ssh_password` in the Packer config match what preseed.cfg creates
+3. Ensure QEMU guest agent is installed (needed for IP detection)
+
+### Proxmox API authentication errors
+
+- Verify `proxmox_api_user` format: `user@realm!token-name` (e.g., `root@pam!packer`)
+- Ensure the API token has permissions: `VM.Allocate`, `VM.Config.*`, `Datastore.AllocateSpace`, `Sys.Modify`
+- Check `proxmox_host` includes the port (`:8006`)
+
+### Debug mode
+
+```bash
+PACKER_LOG=1 packer build .
+```

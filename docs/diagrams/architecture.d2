@@ -1,0 +1,197 @@
+direction: down
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    pad: 5
+  }
+}
+
+title: {
+  label: Homelab Proxmox Pipeline
+  near: top-center
+  shape: text
+  style: {
+    font-size: 24
+    bold: true
+  }
+}
+
+# Stage 1
+stage1: Stage 1 - Build Template {
+  style: {
+    fill: "#f0f9ff"
+    stroke: "#0369a1"
+  }
+
+  local: Your Machine {
+    style: {
+      fill: "#e0f2fe"
+      stroke: "#0284c7"
+    }
+
+    packer: Packer {
+      shape: rectangle
+      style.fill: "#fff"
+    }
+
+    files: {
+      shape: text
+      label: |md
+        **Local Files**
+        - preseed.cfg
+        - cloud.cfg.tpl
+      |
+      style.font-size: 12
+    }
+
+    http: HTTP Server {
+      shape: rectangle
+      style.fill: "#fef3c7"
+      style.font-size: 12
+    }
+
+    packer -> http: "Starts"
+  }
+
+  proxmox: Proxmox VE {
+    style: {
+      fill: "#fef3e8"
+      stroke: "#ea580c"
+    }
+
+    temp_vm: Temporary VM {
+      shape: rectangle
+      style.fill: "#ede9fe"
+      style.stroke: "#7c3aed"
+
+      debian: Debian Installer {
+        shape: rectangle
+        style.fill: "#fff"
+      }
+
+      cloudinit: Cloud init provision {
+        shape: rectangle
+        style.fill: "#fff"
+      }
+    }
+
+    template: VM Template {
+      shape: hexagon
+      style: {
+        fill: "#d1fae5"
+        stroke: "#059669"
+        bold: true
+      }
+    }
+
+    storage: Proxmox Storage {
+      shape: cylinder
+      style.fill: "#e5e7eb"
+      style.font-size: 12
+    }
+
+    temp_vm -> template: "Converts to"
+    template -> storage: "Stored in"
+  }
+
+  # Cross-boundary connections
+  local.packer -> proxmox.temp_vm: "Creates" {
+    style.stroke: "#6b7280"
+  }
+  local.http -> proxmox.temp_vm.debian: "Configures" {
+    style.stroke: "#6b7280"
+  }
+  local.packer -> proxmox.temp_vm.cloudinit: "Triggers" {
+    style.stroke: "#6b7280"
+  }
+}
+
+# Stage 2
+stage2: Stage 2 - Deploy VMs {
+  style: {
+    fill: "#fefce8"
+    stroke: "#ca8a04"
+  }
+
+  local: Your Machine {
+    style: {
+      fill: "#fef9c3"
+      stroke: "#eab308"
+    }
+
+    terraform: Terraform {
+      shape: rectangle
+      style.fill: "#fff"
+    }
+
+    tfvars: {
+      shape: text
+      label: |md
+        **terraform.tfvars**
+        - SSH keys
+        - Hostnames
+        - Network config
+        - User/password
+      |
+      style.font-size: 12
+    }
+  }
+
+  proxmox: Proxmox VE {
+    style: {
+      fill: "#fef3e8"
+      stroke: "#ea580c"
+    }
+
+    template: VM Template {
+      shape: hexagon
+      style: {
+        fill: "#d1fae5"
+        stroke: "#059669"
+      }
+    }
+
+    cloudinit_drive: Cloud-init Drive {
+      shape: cylinder
+      style.fill: "#dbeafe"
+      style.font-size: 12
+    }
+
+    vms: Running VMs {
+      style.fill: "#ede9fe"
+      style.stroke: "#7c3aed"
+
+      cp: Control Plane {
+        shape: rectangle
+        style.fill: "#fff"
+      }
+
+      workers: Worker Nodes {
+        shape: rectangle
+        style.fill: "#fff"
+      }
+    }
+
+    provisioning: Provisioning Process {
+      shape: parallelogram
+    }
+
+    vms.cp <- provisioning: "Created from VM Template"
+    vms.workers <- provisioning: "Created from VM Template"
+    provisioning <- template: "Clones"
+    cloudinit_drive -> provisioning: "Injects config"
+  }
+
+  local.terraform -> proxmox.vms: "Creates VMs" {
+    style.stroke: "#6b7280"
+  }
+}
+
+# Connection between stages
+stage1 -> stage2: "Template ready\nin Proxmox" {
+  style: {
+    stroke: "#059669"
+    stroke-width: 2
+  }
+}

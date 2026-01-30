@@ -1,81 +1,119 @@
-# Terraform VM Deployment for Proxmox
+# Terraform Deployment
 
-This folder contains the Terraform configuration files to deploy virtual machines (VMs) on Proxmox Virtual Environment (PVE) using a pre-built Cloud-Init template. 
-This Terraform configuration is designed as a starter for a k8s cluster, with one Control Plane and `n` worker nodes.
+> **Getting Started?** See the [main README](../README.md) for quick start instructions.
 
-## Setup
+This directory contains the Terraform configuration for deploying VMs from the Packer-built template.
 
-1. **Create Variables File:**
-    * Copy the example variables file:
-        ```bash
-        cp example-variables.tfvars terraform.tfvars
-        ```
-    * **Edit `terraform.tfvars`** and fill in your specific details.
+## Files
 
-2. **Review Configuration:**
-    * Examine `main.tf` if you want to change VM resources (cores, memory, disk size), network bridge (`vmbr0`), storage pools (`local-lvm`), etc.
-    
-## Deployment
+| File | Purpose |
+|------|---------|
+| `main.tf` | VM resource definitions (control plane + worker nodes) |
+| `variables.tf` | Input variable declarations with defaults |
+| `versions.tf` | Provider versions and HCP Terraform backend config |
+| `outputs.tf` | Output definitions (VM IP addresses) |
+| `example-variables.tfvars` | Example variables file (copy to `terraform.tfvars`) |
 
-1. **Login to HCP Terraform:**
-   * Ensure you are properly authenticated into HCP Terraform by running:
-       ```bash
-       terraform login
-       ```
+## All Variables
 
-2.  **Set Environment Variables for your HCP Terraform:**
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `proxmox_host` | Proxmox API URL | — |
+| `proxmox_node` | Proxmox node name | — |
+| `proxmox_api_user` | API user (`user@realm!token-name`) | — |
+| `proxmox_api_token_secret` | API token (use `TF_VAR_` env var) | — |
+| `proxmox_skip_tls_verify` | Skip TLS certificate verification | `true` |
+| `template_name` | Name of the Packer-built template to clone | — |
+| `worker_node_count` | Number of worker VMs to create | `1` |
+| `vm_bridge` | Network bridge | `vmbr0` |
+| `disk_storage_pool` | Storage pool for VM disks | `local-lvm` |
+| `cloudinit_storage_pool` | Storage pool for cloud-init drives | `local-lvm` |
+| `cloudinit_user` | Default user created by cloud-init | `debian` |
+| `cloudinit_password` | Password for cloud-init user (use env var) | — |
+| `ssh_public_keys` | SSH public keys (newline-separated) | — |
 
-    * **For Linux/macOS (e.g., bash, zsh):**
-     Open your terminal and execute the following commands, replacing the placeholder values with your actual details:
-       ```bash
-       export TF_CLOUD_ORGANIZATION="your-hcp-organization-name"
-       export TF_WORKSPACE="your-desired-workspace-name"
-       ```
-     To make these settings persist for your current terminal session or for future sessions, consider adding these lines to your shell's profile file (e.g., `~/.bashrc`, `~/.zshrc`, `~/.profile`). After editing the profile file, either source it (e.g., `source ~/.bashrc`) or open a new terminal window.
+## HCP Terraform Setup
 
-    * **For Windows (PowerShell):**
-     Open PowerShell and execute the following commands, replacing the placeholder values:
-       ```powershell
-       $env:TF_CLOUD_ORGANIZATION = "your-hcp-organization-name"
-       $env:TF_WORKSPACE = "your-desired-workspace-name"
-       ```
-     These commands set the variables for the current PowerShell session. For a more persistent setting (across PowerShell sessions for the current user), use:
-       ```powershell
-       [System.Environment]::SetEnvironmentVariable("TF_CLOUD_ORGANIZATION", "your-hcp-organization-name", "User")
-       [System.Environment]::SetEnvironmentVariable("TF_WORKSPACE", "your-desired-workspace-name", "User")
-       ```
-     After using `SetEnvironmentVariable`, you **must open a new PowerShell window** for the changes to be recognized by subsequent commands.
+This configuration uses HCP Terraform (Terraform Cloud) for remote state storage.
 
-    Replace `"your-hcp-organization-name"` with your actual HCP Terraform organization name and `"your-desired-workspace-name"` with the name you want for your workspace (Terraform will create this workspace if it doesn't already exist in your organization).
+### First-time setup
 
-3. **Initialize Terraform:**
-    * Download the required Terraform provider for Proxmox. Run this in the same directory as `main.tf`:
-        ```bash
-        terraform init
-        ```
-      
-4. **Plan the Deployment:**
-    * Generate and show an execution plan:
-        ```bash
-        terraform plan
-        ```
-    * This command will show you what resources will be created, modified, or destroyed.
+1. Create a free account at [app.terraform.io](https://app.terraform.io)
+2. Create an organization
+3. The workspace is created automatically on first `terraform init`
 
-5. **Apply the Configuration:**
-    * Start the deployment process:
-        ```bash
-        terraform apply
-        ```
-    * Terraform will prompt for confirmation before proceeding. Type `yes` to continue.
+### Environment variables
 
-6. **Monitor the Deployment:**
-    * The deployment process can take a few minutes depending on your internet speed, host hardware, and template size.
-    * You can watch the progress in the Terraform output console.
-    * You can also monitor the VMs being created via the Proxmox web UI.
-
-## Cleanup
-
-To destroy the created VMs, run:
+**Linux/macOS:**
 ```bash
-terraform destroy
+export TF_CLOUD_ORGANIZATION="your-org-name"
+export TF_WORKSPACE="homelab-proxmox"  # or any name you choose
+export TF_VAR_proxmox_api_token_secret="your-token"
+```
+
+**Windows PowerShell:**
+```powershell
+$env:TF_CLOUD_ORGANIZATION = "your-org-name"
+$env:TF_WORKSPACE = "homelab-proxmox"
+$env:TF_VAR_proxmox_api_token_secret = "your-token"
+```
+
+**Windows (persistent):**
+```powershell
+[System.Environment]::SetEnvironmentVariable("TF_CLOUD_ORGANIZATION", "your-org-name", "User")
+[System.Environment]::SetEnvironmentVariable("TF_WORKSPACE", "homelab-proxmox", "User")
+# Open a new terminal after running these
+```
+
+## Customizing VM Specs
+
+Edit `main.tf` to modify the VM resources:
+
+**Control plane** (`proxmox_vm_qemu.k8s_control_plane`):
+- `cores`, `memory`, `disk.size` — Compute resources
+- `ipconfig0` — Static IP configuration
+
+**Worker nodes** (`proxmox_vm_qemu.k8s_worker_nodes`):
+- Same options as control plane
+- `count` — Controlled by `var.worker_node_count`
+- Uses DHCP by default
+
+## Outputs
+
+After `terraform apply`, these outputs are available:
+
+```bash
+terraform output k8s_control_plane_ip    # Control plane IP
+terraform output k8s_worker_node_ips     # List of worker IPs
+```
+
+Note: IP detection requires QEMU guest agent running in the VMs.
+
+## Troubleshooting
+
+### "Could not find VM template"
+
+The template name in `terraform.tfvars` doesn't match the Packer-built template. Check the exact name in Proxmox UI or use `pvesh get /nodes/<node>/qemu --output-format json | jq '.[] | select(.template==1)'`.
+
+### VMs created but no IP in outputs
+
+QEMU guest agent isn't running or isn't installed. The template should have it pre-installed; verify with `systemctl status qemu-guest-agent` inside a VM.
+
+### Cloud-init not applying configuration
+
+- Check cloud-init logs: `cat /var/log/cloud-init-output.log`
+- Verify cloud-init drive is attached in Proxmox UI
+- Ensure `cicustom` isn't overriding the configuration
+
+### API permission errors
+
+Ensure the API token has these Proxmox permissions:
+- `VM.Allocate`, `VM.Clone`, `VM.Config.*`, `VM.Monitor`, `VM.Audit`
+- `Datastore.AllocateSpace`, `Datastore.Audit`
+- `SDN.Use` (if using SDN)
+
+### Debug mode
+
+```bash
+TF_LOG=DEBUG terraform apply
 ```
